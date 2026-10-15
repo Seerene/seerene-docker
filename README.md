@@ -78,6 +78,11 @@ location is an equivalent shortcut.
 The toolchain needs write access to the working directory `/seerene` and all directories listed
 above, as well as to the home directory of the user running it.
 
+## Network Access
+
+The execution environment needs network access to the systems with the data to be analyzed. If the
+analysis results are to be uploaded automatically, HTTPS access to `tp.seerene.com` must be allowed.
+
 ## Setting up the Credentials Store
 
 The Seerene analysis toolchain uses a shared credentials store to manage the access information for
@@ -150,7 +155,7 @@ FROM ghcr.io/seerene/seerene:latest
 # COPY corporate-ca.crt /usr/local/share/ca-certificates/
 # RUN update-ca-certificates
 
-# Optional: bake the configuration into the image instead of mounting it at runtime.
+# Add the configuration to the image (mount it additionally if ticket project crawling is active).
 COPY bundle/configuration/ /seerene/configuration/
 
 # Optional: change the default command (see `analysis_tool_orchestrator --help`).
@@ -172,6 +177,9 @@ docker build \
   -t my-seerene .
 ```
 
+These arguments apply only while the image is built, e.g. for downloading Debian packages. They are not
+passed on to the running container; see the Compose example below for a proxy at runtime.
+
 ## Deploying the Docker Container
 
 The entry point of the image is `analysis_tool_orchestrator`; the command to run is passed as argument:
@@ -187,8 +195,8 @@ Both `probe-all` and `execute-all` accept `--analysis-group-key` and `--since`; 
 
 ### Docker Compose
 
-The sample `docker-compose.yml` builds the image from the Dockerfile above and mounts the persistent
-directories from the working directory:
+The sample `docker-compose.yml` builds the image from the Dockerfile above, which contains the
+`configuration` directory, and mounts the Work Artifact directories from the working directory:
 
 ```yaml
 services:
@@ -197,13 +205,22 @@ services:
     image: my-seerene
     command: ["execute-all"]
     volumes:
-      - ./bundle/configuration:/seerene/configuration
       - ./workspace:/seerene/workspace
       - ./ticket_data:/seerene/ticket_data
       - ./author_deduplication:/seerene/author_deduplication
       - ./third_party_metrics:/seerene/third_party_metrics
       - ./log_reports:/seerene/log_reports
+    # Only if the toolchain must reach your systems or tp.seerene.com through a proxy
+    # and the runtime environment does not already provide these variables:
+    # environment:
+    #   HTTP_PROXY: http://proxy.example.com:8080
+    #   HTTPS_PROXY: http://proxy.example.com:8080
+    #   NO_PROXY: localhost,127.0.0.1
 ```
+
+If ticket project crawling is active, the configuration must be persistent as well: add
+`./bundle/configuration:/seerene/configuration` to the volumes. The mounted directory then takes
+precedence over the copy in the image.
 
 ```sh
 docker compose run --build --rm seerene              # execute-all
@@ -214,58 +231,67 @@ docker compose run --build --rm seerene probe-all    # probe only
 
 ### Kubernetes
 
-A Deployment starts a pod with the container. The directories `author_deduplication`, `workspace` and
-`ticket_data` are mounted into `/seerene` from Persistent Volume Claims with `ReadWriteMany` access;
-add `third_party_metrics` and `log_reports` in the same way if used. CPU and memory limits can be
-specified as needed.
+An analysis is a run that ends, so use a `CronJob` for regular analyses and a `Job` for a one-off run,
+not a `Deployment` (which would restart `execute-all` as soon as it finishes). The same directories as
+in the Compose example are mounted into `/seerene` from Persistent Volume Claims with `ReadWriteMany`
+access. CPU and memory limits can be specified as needed.
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: CronJob
 metadata:
-  name: run-job
+  name: seerene-analysis
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: run-job
-  template:
-    metadata:
-      labels:
-        app: run-job
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
     spec:
-      containers:
-      - name: run-container
-        image: <your-image-here>
-        args: ["execute-all"]
-        volumeMounts:
-        - name: author_deduplication
-          mountPath: /seerene/author_deduplication
-        - name: ticket_data
-          mountPath: /seerene/ticket_data
-        - name: workspace
-          mountPath: /seerene/workspace
-      restartPolicy: Always
-      volumes:
-      - name: author_deduplication
-        persistentVolumeClaim:
-          claimName: author_deduplication-pvc
-      - name: ticket_data
-        persistentVolumeClaim:
-          claimName: ticket_data-pvc
-      - name: workspace
-        persistentVolumeClaim:
-          claimName: workspace-pvc
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: seerene
+            image: <your-image-here>
+            args: ["execute-all"]
+            volumeMounts:
+            - name: workspace
+              mountPath: /seerene/workspace
+            - name: ticket-data
+              mountPath: /seerene/ticket_data
+            - name: author-deduplication
+              mountPath: /seerene/author_deduplication
+            - name: third-party-metrics
+              mountPath: /seerene/third_party_metrics
+            - name: log-reports
+              mountPath: /seerene/log_reports
+          volumes:
+          - name: workspace
+            persistentVolumeClaim:
+              claimName: workspace-pvc
+          - name: ticket-data
+            persistentVolumeClaim:
+              claimName: ticket-data-pvc
+          - name: author-deduplication
+            persistentVolumeClaim:
+              claimName: author-deduplication-pvc
+          - name: third-party-metrics
+            persistentVolumeClaim:
+              claimName: third-party-metrics-pvc
+          - name: log-reports
+            persistentVolumeClaim:
+              claimName: log-reports-pvc
+```
+
+For a one-off run, start a `Job` from the CronJob:
+
+```sh
+kubectl create job --from=cronjob/seerene-analysis seerene-analysis-once
 ```
 
 Each claim requests storage from a file share with `ReadWriteMany` access mode, for example on Azure
 File Storage (`storageClassName: azurefile`). Size `workspace` according to the amount of source code
-to be analyzed.
-
-## Network Access
-
-The execution environment needs network access to the systems with the data to be analyzed. If the
-analysis results are to be uploaded automatically, HTTPS access to `tp.seerene.com` must be allowed.
+to be analyzed. If ticket project crawling is active, mount `/seerene/configuration` from a claim as
+well. Proxy settings, if needed, go into the container's `env` as in the Compose example.
 
 ## Getting Configuration
 
