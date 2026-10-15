@@ -178,7 +178,7 @@ The entry point of the image is `analysis_tool_orchestrator`; the command to run
 
 | Command | What it does |
 |---|---|
-| `print-version` | prints the version (default command) |
+| `print-version` | prints the orchestrator version (default command) |
 | `probe-all` | probe only, no upload; result in `workspace/probe_results-<timestamp>.zip` |
 | `execute-all` | full run: crawl, analyze, upload to the Seerene platform |
 
