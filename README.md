@@ -1,6 +1,6 @@
 # Seerene Analysis Toolchain for Docker
 
-`ghcr.io/seerene/seerene` is the base image for running the Seerene Local Analyzer inside your own
+`ghcr.io/seerene/seerene` is the base image for running the Seerene analysis toolchain inside your own
 network. It crawls your code repositories, ticket systems and third-party metric tools (e.g. SonarQube),
 runs the analyses and uploads the results to the Seerene platform. Source code never leaves your network.
 
@@ -18,7 +18,7 @@ Credentials for the systems to be analyzed are kept in an encrypted credentials 
 |---|---|
 | Base | Debian 12 (`bookworm-slim`) |
 | Architectures | `linux/amd64`, `linux/arm64` |
-| Local Analyzer executables on `PATH` | `analysis_tool_orchestrator` (entry point), `localanalyzer`, `thirdparty_codemetrics_converter` |
+| Executables on `PATH` | `analysis_tool_orchestrator` (entry point), `localanalyzer`, `thirdparty_codemetrics_converter` |
 | Also included | `git`, `jq`, CA certificates |
 | Working directory | `/seerene` |
 
@@ -28,8 +28,8 @@ Single-architecture images are tagged `<date>-amd64` and `<date>-arm64`.
 
 ## Folder Structure
 
-The Seerene Local Analyzer bundle consists of "Input Artifacts" and "Work Artifacts". Input Artifacts
-are the configurations of the Local Analyzer. Work Artifacts contain data related to
+The Seerene bundle consists of "Input Artifacts" and "Work Artifacts". Input Artifacts
+are the configurations of the analysis toolchain. Work Artifacts contain data related to
 code repositories or tickets and the intermediate steps of the analysis.
 
 ### Directories for Input Artifacts
@@ -69,13 +69,13 @@ These directories are declared as volumes in the image. Mount persistent storage
 directories (`workspace`, `ticket_data`, `author_deduplication`) and, if used, on `third_party_metrics`
 and `log_reports`. A directory that is not mounted ends up in an anonymous Docker volume that is lost
 when the container is removed. `configuration` is either added to the image at build time (see below) or
-mounted as well; mounting it is required if ticket project crawling is active, because the Local Analyzer
+mounted as well; mounting it is required if ticket project crawling is active, because the toolchain
 extends the configuration during the run. Mounting the whole `/seerene` directory from one persistent
 location is an equivalent shortcut.
 
 ### Write Access Requirements
 
-The Local Analyzer needs write access to the working directory `/seerene` and all directories listed
+The toolchain needs write access to the working directory `/seerene` and all directories listed
 above, as well as to the home directory of the user running it.
 
 ## Setting up the Credentials Store
@@ -143,7 +143,7 @@ Dockerfile, in a Git repository.
 
 ```dockerfile
 # Sample customer image on top of the Seerene base image.
-# Build from this directory: docker build -t seerene-local-analyzer .
+# Build from this directory: docker build -t my-seerene .
 FROM ghcr.io/seerene/seerene:latest
 
 # Optional: trust a corporate CA for Git, Jira, SonarQube or the Seerene platform.
@@ -160,7 +160,7 @@ CMD ["execute-all"]
 ### Building the Docker Image
 
 ```sh
-docker build -t seerene-local-analyzer .
+docker build -t my-seerene .
 ```
 
 If your environment uses an HTTP/HTTPS proxy, pass the proxy settings as build arguments:
@@ -169,7 +169,7 @@ If your environment uses an HTTP/HTTPS proxy, pass the proxy settings as build a
 docker build \
   --build-arg http_proxy=http://proxy.example.com:8080 \
   --build-arg https_proxy=http://proxy.example.com:8080 \
-  -t seerene-local-analyzer .
+  -t my-seerene .
 ```
 
 ## Deploying the Docker Container
@@ -178,7 +178,7 @@ The entry point of the image is `analysis_tool_orchestrator`; the command to run
 
 | Command | What it does |
 |---|---|
-| `print-version` | prints the Local Analyzer version (default command) |
+| `print-version` | prints the version (default command) |
 | `probe-all` | probe only, no upload; result in `workspace/probe_results-<timestamp>.zip` |
 | `execute-all` | full run: crawl, analyze, upload to the Seerene platform |
 
@@ -194,7 +194,7 @@ directories from the working directory:
 services:
   seerene:
     build: .
-    image: seerene-local-analyzer
+    image: my-seerene
     command: ["execute-all"]
     volumes:
       - ./bundle/configuration:/seerene/configuration
