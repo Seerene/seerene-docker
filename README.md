@@ -29,13 +29,11 @@ Single-architecture images are tagged `<date>-amd64` and `<date>-arm64`.
 ## Folder Structure
 
 The Seerene Local Analyzer bundle consists of "Input Artifacts" and "Work Artifacts". Input Artifacts
-are configurations and the executables of the Local Analyzer. Work Artifacts contain data related to
+are the configurations of the Local Analyzer. Work Artifacts contain data related to
 code repositories or tickets and the intermediate steps of the analysis.
 
 ### Directories for Input Artifacts
 
-* **bin**: The executables of the Local Analyzer. When running in Docker, these are part of the base
-  image and no `bin` directory is needed.
 * **configuration**: Bundle-specific configurations for code repositories, third-party tools,
   credentials (`.credentials_store`) and lifecycle management (`orchestration.json`, `ticket_config/`).
 
