@@ -201,8 +201,8 @@ services:
       - ./workspace:/seerene/workspace
       - ./ticket_data:/seerene/ticket_data
       - ./author_deduplication:/seerene/author_deduplication
-      # - ./third_party_metrics:/seerene/third_party_metrics
-      # - ./log_reports:/seerene/log_reports
+      - ./third_party_metrics:/seerene/third_party_metrics
+      - ./log_reports:/seerene/log_reports
 ```
 
 ```sh
